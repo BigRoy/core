@@ -432,6 +432,25 @@ class SiloTabWidget(QtWidgets.QTabBar):
 
         self.set_current_silo(silo)
 
+    def shift(self, step, overflow=False):
+        """Shift and scroll through tabs by step.
+
+        Args:
+            step (int): The amount of steps to shift tabs.
+            overflow (bool): Whether to roll over when below zero or above
+                end of tabs.
+
+        """
+        num = self.count() - 1
+        new = self.currentIndex() + step
+        if overflow:
+            new = new % num
+        elif new < 0 or new >= num:
+            return
+
+        if new != self.currentIndex():
+            self.setCurrentIndex(new)
+
 
 class AssetView(DeselectableTreeView):
     """Asset view.
@@ -445,68 +464,19 @@ class AssetView(DeselectableTreeView):
         self.setIndentation(15)
         self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.setHeaderHidden(True)
-        self._filter_edit = None
 
-    def set_filter_edit(self, filter_edit):
-        assert isinstance(filter_edit, QtWidgets.QLineEdit), \
-            "Must be QLineEdit"
-        self._filter_edit = filter_edit
+        # Pass on focus when event not used
+        self.setFocusPolicy(QtCore.Qt.NoFocus)
 
     def keyPressEvent(self, event):
-        """Allow to type in the view to fill in a filter QLineEdit.
+        """Only use arrow keys."""
 
-        This will transfer key press events towards a QLineEdit if any was
-        assigned to this view. The key commands will then allow to type
-        as if it's a quick search in the view - like a filter bar.
-
-        Returns:
-            bool: Whether the event was used. This will always capture it and
-                return True.
-
-        """
-
-        if self._filter_edit:
-
-            # Ensure we are at the end of the line if nothing selected
-            if not self._filter_edit.selectedText():
-                self._filter_edit.end(False)
-
-            # Pass on these key sequences directly
-            sequences = [
-                QtGui.QKeySequence.SelectAll,
-                QtGui.QKeySequence.Paste,
-                QtGui.QKeySequence.DeleteStartOfWord,
-                QtGui.QKeySequence.Delete
-            ]
-            if any(event.matches(sequence) for sequence in sequences):
-
-                # Workaround Qt only removing the first character upon
-                # Ctrl + Backspace when a selection is active
-                if event.matches(QtGui.QKeySequence.DeleteStartOfWord):
-                    self._filter_edit.deselect()
-
-                return self._filter_edit.keyPressEvent(event)
-
-            # Pass on these keys directly
-            keys = [
-                QtCore.Qt.Key_Backspace
-            ]
-            if any(event.key() == key for key in keys):
-                return self._filter_edit.keyPressEvent(event)
-
-            # Type a character
-            character = event.text()
-            if character and re.match("[A-Za-z0-9_]", character):
-                # Add a character
-                self._filter_edit.insert(character)
-                self.expandAll()
-                return True
-
-        super(AssetView, self).keyPressEvent(event)
-
-        # Always take the keyPressEvent when active to force it to not pass
-        # any edits to applications like Maya
-        return True
+        # Take only arrow keys
+        if event.key() in [QtCore.Qt.Key_Left,
+                           QtCore.Qt.Key_Right,
+                           QtCore.Qt.Key_Down,
+                           QtCore.Qt.Key_Up]:
+            return super(AssetView, self).keyPressEvent(event)
 
 
 class AssetWidget(QtWidgets.QWidget):
@@ -527,6 +497,7 @@ class AssetWidget(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super(AssetWidget, self).__init__(parent=parent)
         self.setContentsMargins(0, 0, 0, 0)
+        self.setFocusPolicy(QtCore.Qt.StrongFocus)
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -555,11 +526,8 @@ class AssetWidget(QtWidgets.QWidget):
         view.setModel(proxy)
 
         filter = QtWidgets.QLineEdit()
-        filter.textChanged.connect(proxy.setFilterFixedString)
+        filter.textChanged.connect(self._on_filter_changed)
         filter.setPlaceholderText("Filter assets..")
-
-        # Allow the key presses in the AssetView to update the filter
-        view.set_filter_edit(filter)
 
         # Layout
         layout.addLayout(header)
@@ -578,6 +546,12 @@ class AssetWidget(QtWidgets.QWidget):
         self.model = model
         self.proxy = proxy
         self.view = view
+        self.filter = filter
+
+    def _on_filter_changed(self, text):
+        self.proxy.setFilterFixedString(text)
+        if text:
+            self.view.expandAll()
 
     def _on_silo_changed(self):
         """Callback for silo change"""
@@ -664,3 +638,75 @@ class AssetWidget(QtWidgets.QWidget):
 
                 # Set the currently active index
                 self.view.setCurrentIndex(index)
+
+    def keyPressEvent(self, event):
+        """Allow to type in the widget to fill in the filter QLineEdit.
+
+        This will transfer key press events towards the QLineEdit.
+        The key commands will then allow to type as if it's a quick
+        search in the view - like a filter bar.
+
+        Returns:
+            bool: Whether the event was used.
+                This will always capture it and return True.
+
+        """
+
+        # Allow shifting to previous or next silo with Ctrl + right/left
+        control = event.modifiers() & QtCore.Qt.ControlModifier
+        if control:
+            shift = 0
+            if event.key() == QtCore.Qt.Key_Left:
+                shift = -1
+            elif event.key() == QtCore.Qt.Key_Right:
+                shift = 1
+
+            if shift:
+                self.silo.shift(shift)
+                self.view.expandAll()
+                return True
+
+        # Arrows go to list view so we can manipulate the list
+        if event.key() in [QtCore.Qt.Key_Left,
+                           QtCore.Qt.Key_Right,
+                           QtCore.Qt.Key_Down,
+                           QtCore.Qt.Key_Up]:
+            self.view.keyPressEvent(event)
+
+        # Ensure we are at the end of the line if nothing selected
+        if not self.filter.selectedText():
+            self.filter.end(False)
+
+        # Pass on these key sequences directly
+        sequences = [
+            QtGui.QKeySequence.SelectAll,
+            QtGui.QKeySequence.Paste,
+            QtGui.QKeySequence.DeleteStartOfWord,
+            QtGui.QKeySequence.Delete
+        ]
+        if any(event.matches(sequence) for sequence in sequences):
+
+            # Workaround Qt only removing the first character upon
+            # Ctrl + Backspace when a selection is active
+            if event.matches(QtGui.QKeySequence.DeleteStartOfWord):
+                self.filter.deselect()
+
+            return self.filter.keyPressEvent(event)
+
+        # Pass on these keys directly
+        keys = [
+            QtCore.Qt.Key_Backspace
+        ]
+        if any(event.key() == key for key in keys):
+            return self.filter.keyPressEvent(event)
+
+        # Type a character
+        character = event.text()
+        if character and re.match("[A-Za-z0-9_]", character):
+            # Add a character
+            self.filter.insert(character)
+            return True
+
+        # Always take the keyPressEvent when active to force it to not pass
+        # any edits to applications like Maya
+        return True
