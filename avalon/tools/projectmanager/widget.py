@@ -1,5 +1,6 @@
 import logging
 import contextlib
+import re
 
 from ...vendor import qtawesome as awesome
 from ...vendor.Qt import QtWidgets, QtCore, QtGui
@@ -167,6 +168,7 @@ class AssetModel(TreeModel):
 
     DocumentRole = QtCore.Qt.UserRole + 2
     ObjectIdRole = QtCore.Qt.UserRole + 3
+    NameRole = QtCore.Qt.UserRole + 4
 
     def __init__(self, silo=None, parent=None):
         super(AssetModel, self).__init__(parent=parent)
@@ -283,21 +285,10 @@ class AssetModel(TreeModel):
         if role == self.DocumentRole:
             return node.get("_document", None)
 
+        if role == self.NameRole:
+            return node.get("name", None)
+
         return super(AssetModel, self).data(index, role)
-
-
-class AssetView(DeselectableTreeView):
-    """Item view.
-
-    This implements a context menu.
-
-    """
-
-    def __init__(self):
-        super(AssetView, self).__init__()
-        self.setIndentation(15)
-        self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-        self.setHeaderHidden(True)
 
 
 class SiloTabWidget(QtWidgets.QTabBar):
@@ -442,6 +433,82 @@ class SiloTabWidget(QtWidgets.QTabBar):
         self.set_current_silo(silo)
 
 
+class AssetView(DeselectableTreeView):
+    """Asset view.
+
+    This implements a key press event that updates the filter.
+
+    """
+
+    def __init__(self):
+        super(AssetView, self).__init__()
+        self.setIndentation(15)
+        self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.setHeaderHidden(True)
+        self._filter_edit = None
+
+    def set_filter_edit(self, filter_edit):
+        assert isinstance(filter_edit, QtWidgets.QLineEdit), \
+            "Must be QLineEdit"
+        self._filter_edit = filter_edit
+
+    def keyPressEvent(self, event):
+        """Allow to type in the view to fill in a filter QLineEdit.
+
+        This will transfer key press events towards a QLineEdit if any was
+        assigned to this view. The key commands will then allow to type
+        as if it's a quick search in the view - like a filter bar.
+
+        Returns:
+            bool: Whether the event was used. This will always capture it and
+                return True.
+
+        """
+
+        if self._filter_edit:
+
+            # Ensure we are at the end of the line if nothing selected
+            if not self._filter_edit.selectedText():
+                self._filter_edit.end(False)
+
+            # Pass on these key sequences directly
+            sequences = [
+                QtGui.QKeySequence.SelectAll,
+                QtGui.QKeySequence.Paste,
+                QtGui.QKeySequence.DeleteStartOfWord,
+                QtGui.QKeySequence.Delete
+            ]
+            if any(event.matches(sequence) for sequence in sequences):
+
+                # Workaround Qt only removing the first character upon
+                # Ctrl + Backspace when a selection is active
+                if event.matches(QtGui.QKeySequence.DeleteStartOfWord):
+                    self._filter_edit.deselect()
+
+                return self._filter_edit.keyPressEvent(event)
+
+            # Pass on these keys directly
+            keys = [
+                QtCore.Qt.Key_Backspace
+            ]
+            if any(event.key() == key for key in keys):
+                return self._filter_edit.keyPressEvent(event)
+
+            # Type a character
+            character = event.text()
+            if character and re.match("[A-Za-z0-9_]", character):
+                # Add a character
+                self._filter_edit.insert(character)
+                self.expandAll()
+                return True
+
+        super(AssetView, self).keyPressEvent(event)
+
+        # Always take the keyPressEvent when active to force it to not pass
+        # any edits to applications like Maya
+        return True
+
+
 class AssetWidget(QtWidgets.QWidget):
     """A Widget to display a tree of assets with filter
 
@@ -483,12 +550,16 @@ class AssetWidget(QtWidgets.QWidget):
         proxy = RecursiveSortFilterProxyModel()
         proxy.setSourceModel(model)
         proxy.setFilterCaseSensitivity(QtCore.Qt.CaseInsensitive)
+        proxy.setFilterRole(model.NameRole)     # filter by full name
         view = AssetView()
         view.setModel(proxy)
 
         filter = QtWidgets.QLineEdit()
         filter.textChanged.connect(proxy.setFilterFixedString)
         filter.setPlaceholderText("Filter assets..")
+
+        # Allow the key presses in the AssetView to update the filter
+        view.set_filter_edit(filter)
 
         # Layout
         layout.addLayout(header)
