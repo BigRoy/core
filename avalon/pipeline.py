@@ -271,7 +271,16 @@ class Application(Action):
         return True
 
     def environ(self, session):
-        """Build application environment"""
+        """Return the Application's environment
+
+        Args:
+            session (avalon-core:session-1.0): The Session to build for.
+
+        Returns:
+            dict: The environment variables for the Application
+                with the given Session.
+
+        """
 
         session = session.copy()
         session["AVALON_APP"] = self.config["application_dir"]
@@ -284,7 +293,7 @@ class Application(Action):
         session["AVALON_WORKDIR"] = workdir
 
         # Build environment
-        env = os.environ.copy()
+        env = dict()
         env.update(self.config.get("environment", {}))
         env.update(session)
 
@@ -326,6 +335,7 @@ class Application(Action):
                 self.log.error(" - %s -> %s" % (src, dst))
 
     def launch(self, environment):
+        """Launch the executable using subprocess in environment"""
         executable = lib.which(self.config["executable"])
         return lib.launch(executable=executable,
                           args=self.config.get("args", []),
@@ -333,9 +343,18 @@ class Application(Action):
                           cwd=environment["AVALON_WORKDIR"])
 
     def process(self, session, **kwargs):
-        """Process the full Application action"""
+        """Process the full Application action
 
-        environment = self.environ(session)
+        Keyword Args:
+            env (dict, Optional): The environment to build upon. Defaults to
+                the current local environment from `os.environ`.
+            launch (bool, Optional): Whether to trigger executable launch.
+            initialize (bool, Optional): Whether to trigger initialize.
+
+        """
+
+        environment = kwargs.get("env", os.environ.copy())
+        environment.update(self.environ(session))
 
         if kwargs.get("initialize", True):
             self.initialize(environment)
