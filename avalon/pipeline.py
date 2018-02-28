@@ -1150,7 +1150,7 @@ def get_apps(project):
         color = app_definition.get("color", app.get("color", None))
         order = app_definition.get("order", app.get("order", 0))
 
-        action = type("app_%s" % app["name"],
+        action = type("app_%s" % str(app["name"]),
                       (Application,),
                       {
                           "name": app['name'],
