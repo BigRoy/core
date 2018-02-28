@@ -1124,3 +1124,43 @@ def loaders_from_representation(loaders, representation):
 
     context = get_representation_context(representation)
     return [l for l in loaders if is_compatible_loader(l, context)]
+
+
+def get_apps(project):
+    """Define dynamic Application classes for project using `.toml` files
+
+    Args:
+        project (dict): The Project document from the database.
+
+    Returns:
+        list: List of dynamically defined Application classes.
+
+    """
+
+    apps = []
+    for app in project["config"]["apps"]:
+        try:
+            app_definition = lib.get_application(app['name'])
+        except Exception as exc:
+            print("Unable to load application: %s - %s" % (app['name'], exc))
+            continue
+
+        # Get from app definition, if not there from app in project
+        icon = app_definition.get("icon", app.get("icon", "folder-o"))
+        color = app_definition.get("color", app.get("color", None))
+        order = app_definition.get("order", app.get("order", 0))
+
+        action = type("app_%s" % app["name"],
+                      (Application,),
+                      {
+                          "name": app['name'],
+                          "label": app.get("label", app['name']),
+                          "icon": icon,
+                          "color": color,
+                          "order": order,
+                          "config": app_definition.copy()
+                      })
+
+        apps.append(action)
+
+    return apps
