@@ -1,0 +1,20 @@
+{
+    Menus
+    {
+        Target = 'ChildFrame',      -- show only when a Comp is open
+        Before 'Help'               -- place before Help menu
+        {
+            Sub 'Avalon'
+            {
+                --- Creator
+                'Execute  { Name = "Creator", cmd = [[comp = obj:Comp(); comp:RunScript(comp:MapPath("$(AVALON_CORE)/setup/fusion/scripts/run_tool.py"), {tool="creator"})]] }',
+                --- Loader
+                'Execute  { Name = "Loader", cmd = [[comp = obj:Comp(); comp:RunScript(comp:MapPath("$(AVALON_CORE)/setup/fusion/scripts/run_tool.py"), {tool="cbloader"})]] }',
+                --- Publish
+                'Execute  { Name = "Publish", cmd = [[comp = obj:Comp(); comp:RunScript(comp:MapPath("$(AVALON_CORE)/setup/fusion/scripts/run_publish.py"))]] }',
+                --- Manager
+                'Execute  { Name = "Manager", cmd = [[comp = obj:Comp(); comp:RunScript(comp:MapPath("$(AVALON_CORE)/setup/fusion/scripts/run_tool.py"), {tool="cbsceneinventory"})]] }'
+            }
+        },
+   }
+}
