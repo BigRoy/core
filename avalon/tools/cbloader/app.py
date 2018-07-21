@@ -8,7 +8,7 @@ from ... import api, io, style
 from .. import lib
 
 from .lib import refresh_family_config
-from .widgets import SubsetWidget, VersionWidget, FamilyListWidget
+from .widgets import SubsetWidget, VersionsHistoryWidget, FamilyListWidget
 
 module = sys.modules[__name__]
 module.window = None
@@ -40,7 +40,7 @@ class Window(QtWidgets.QDialog):
         assets = AssetWidget()
         families = FamilyListWidget()
         subsets = SubsetWidget()
-        version = VersionWidget()
+        versions_history = VersionsHistoryWidget()
 
         # Create splitter to show / hide family filters
         asset_filter_splitter = QtWidgets.QSplitter()
@@ -55,7 +55,7 @@ class Window(QtWidgets.QDialog):
         split = QtWidgets.QSplitter()
         split.addWidget(asset_filter_splitter)
         split.addWidget(subsets)
-        split.addWidget(version)
+        split.addWidget(versions_history)
         split.setSizes([225, 925, 0])
         container_layout.addWidget(split)
 
@@ -79,7 +79,7 @@ class Window(QtWidgets.QDialog):
             "model": {
                 "assets": assets,
                 "subsets": subsets,
-                "version": version,
+                "versions_history": versions_history,
             },
             "label": {
                 "message": message,
@@ -101,7 +101,7 @@ class Window(QtWidgets.QDialog):
 
         families.active_changed.connect(subsets.set_family_filters)
         assets.selection_changed.connect(self.on_assetschanged)
-        subsets.active_changed.connect(self.on_versionschanged)
+        subsets.active_changed.connect(self.on_subsetschanged)
 
         refresh_family_config()
 
@@ -120,9 +120,9 @@ class Window(QtWidgets.QDialog):
         self.echo("Fetching results..")
         lib.schedule(self._assetschanged, 50, channel="mongo")
 
-    def on_versionschanged(self, *args):
+    def on_subsetschanged(self, *args):
         self.echo("Fetching results..")
-        lib.schedule(self._versionschanged, 50, channel="mongo")
+        lib.schedule(self._subsetschanged, 50, channel="mongo")
 
     def set_context(self, context, refresh=True):
         self.echo("Setting context: {}".format(context))
@@ -174,28 +174,24 @@ class Window(QtWidgets.QDialog):
             subsets.view.resizeColumnToContents(i)
 
         # Clear the version information on asset change
-        self.data['model']['version'].set_version(None)
+        self.data['model']['versions_history'].set_subset(None)
 
         self.data["state"]["context"]["asset"] = document["name"]
         self.data["state"]["context"]["silo"] = document["silo"]
         self.echo("Duration: %.3fs" % (time.time() - t1))
 
-    def _versionschanged(self):
+    def _subsetschanged(self):
 
         subsets = self.data["model"]["subsets"]
-        selection = subsets.view.selectionModel()
+        index = subsets.view.currentIndex()
+        if not index:
+            self.data['model']['versions_history'].set_subset(None)
+            return
 
-        # Active must be in the selected rows otherwise we
-        # assume it's not actually an "active" current index.
-        version = None
-        active = selection.currentIndex()
-        if active:
-            rows = selection.selectedRows(column=active.column())
-            if active in rows:
-                node = active.data(subsets.model.NodeRole)
-                version = node['version_document']['_id']
+        role = subsets.model.NodeRole
+        node = index.data(subsets.model.NodeRole)
 
-        self.data['model']['version'].set_version(version)
+        self.data['model']['versions_history'].set_subset(node["_id"])
 
     def _set_context(self, context, refresh=True):
         """Set the selection in the interface using a context.

@@ -1,5 +1,3 @@
-import datetime
-import pprint
 import inspect
 
 from ...vendor.Qt import QtWidgets, QtCore
@@ -8,7 +6,7 @@ from ... import io
 from ... import api
 from ... import pipeline
 
-from .model import SubsetsModel, FamiliesFilterProxyModel
+from .model import SubsetsModel, VersionHistoryModel, FamiliesFilterProxyModel
 from .delegates import PrettyTimeDelegate, VersionDelegate
 from . import lib
 
@@ -207,142 +205,57 @@ class SubsetWidget(QtWidgets.QWidget):
         print(message)
 
 
-class VersionTextEdit(QtWidgets.QTextEdit):
-    """QTextEdit that displays version specific information.
+class VersionsHistoryWidget(QtWidgets.QWidget):
+    """
 
-    This also overrides the context menu to add actions like copying
-    source path to clipboard or copying the raw data of the version
-    to clipboard.
+    For a subset show the history of published versions with:
+        - version
+        - comment
+        - date
+        - author
 
     """
+
     def __init__(self, parent=None):
-        super(VersionTextEdit, self).__init__(parent=parent)
+        super(VersionsHistoryWidget, self).__init__(parent=parent)
 
-        self.data = {
-            "source": None,
-            "raw": None
-        }
+        label = QtWidgets.QLabel("Version History")
 
-        # Reset
-        self.set_version(None)
+        model = VersionHistoryModel()
 
-    def set_version(self, version_id):
-
-        if not version_id:
-            # Reset state to empty
-            self.data = {
-                "source": None,
-                "raw": None,
+        view = QtWidgets.QTreeView()
+        view.setIndentation(5)
+        view.setStyleSheet("""
+            QTreeView::item{
+                padding: 5px 1px;
+                border: 0px;
             }
-            self.setText("")
-            self.setEnabled(True)
-            return
+        """)
+        view.setAlternatingRowColors(True)
+        view.setAllColumnsShowFocus(True)
+        view.setModel(model)
 
-        self.setEnabled(True)
+        # Stretch comment column by default since it's only field that
+        # can really contain easily growing data
+        header = view.header()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
 
-        version = io.find_one({"_id": version_id, "type": "version"})
-        assert version, "Not a valid version id"
-
-        subset = io.find_one({"_id": version['parent'], "type": "subset"})
-        assert subset, "No valid subset parent for version"
-
-        # Define readable creation timestamp
-        created = version["data"]["time"]
-        created = datetime.datetime.strptime(created, "%Y%m%dT%H%M%SZ")
-        created = datetime.datetime.strftime(created, "%b %d %Y %H:%M")
-
-        comment = version['data'].get("comment", None) or "No comment"
-
-        source = version['data'].get("source", None)
-        source_label = source if source else "No source"
-
-        # Store source and raw data
-        self.data['source'] = source
-        self.data['raw'] = version
-
-        data = {
-            "subset": subset['name'],
-            "version": version['name'],
-            "comment": comment,
-            "created": created,
-            "source": source_label
-        }
-
-        self.setHtml("""
-<h3>{subset} v{version:03d}</h3>
-<b>Comment</b><br>
-{comment}<br>
-<br>
-<b>Created</b><br>
-{created}<br>
-<br>
-<b>Source</b><br>
-{source}<br>""".format(**data))
-
-    def contextMenuEvent(self, event):
-        """Context menu with additional actions"""
-        menu = self.createStandardContextMenu()
-
-        # Add additional actions when any text so we can assume
-        # the version is set.
-        if self.toPlainText().strip():
-
-            menu.addSeparator()
-            action = QtWidgets.QAction("Copy source path to clipboard",
-                                       menu)
-            action.triggered.connect(self.on_copy_source)
-            menu.addAction(action)
-
-            action = QtWidgets.QAction("Copy raw data to clipboard",
-                                       menu)
-            action.triggered.connect(self.on_copy_raw)
-            menu.addAction(action)
-
-        menu.exec_(event.globalPos())
-        del menu
-
-    def on_copy_source(self):
-        """Copy formatted source path to clipboard"""
-        source = self.data.get("source", None)
-        if not source:
-            return
-
-        path = source.format(root=api.registered_root())
-        clipboard = QtWidgets.QApplication.clipboard()
-        clipboard.setText(path)
-
-    def on_copy_raw(self):
-        """Copy raw version data to clipboard
-
-        The data is string formatted with `pprint.pformat`.
-
-        """
-        raw = self.data.get("raw", None)
-        if not raw:
-            return
-
-        raw_text = pprint.pformat(raw)
-        clipboard = QtWidgets.QApplication.clipboard()
-        clipboard.setText(raw_text)
-
-
-class VersionWidget(QtWidgets.QWidget):
-    """A Widget that display information about a specific version"""
-    def __init__(self, parent=None):
-        super(VersionWidget, self).__init__(parent=parent)
+        view.setColumnWidth(0, 50)
+        view.setColumnWidth(1, 200)
+        view.setColumnWidth(2, 125)
+        view.setColumnWidth(3, 80)
 
         layout = QtWidgets.QVBoxLayout(self)
-
-        label = QtWidgets.QLabel("Version")
-        data = VersionTextEdit()
-        data.setReadOnly(True)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(label)
-        layout.addWidget(data)
+        layout.addWidget(view)
 
-        self.data = data
+        self.model = model
+        self.view = view
 
-    def set_version(self, version_id):
-        self.data.set_version(version_id)
+    def set_subset(self, subset_id):
+        self.model.set_subset(subset_id)
 
 
 class FamilyListWidget(QtWidgets.QListWidget):

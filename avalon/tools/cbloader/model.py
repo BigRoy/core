@@ -1,3 +1,5 @@
+import datetime
+
 from ... import io, style
 from ...vendor.Qt import QtCore
 from ...vendor import qtawesome as qta
@@ -163,6 +165,64 @@ class SubsetsModel(TreeModel):
             flags |= QtCore.Qt.ItemIsEditable
 
         return flags
+
+
+class VersionHistoryModel(TreeModel):
+    COLUMNS = ["version",
+               "comment",
+               "time",
+               "author"]
+
+    def __init__(self, parent=None):
+        super(VersionHistoryModel, self).__init__(parent=parent)
+        self._subset_id = None
+
+    def set_subset(self, subset_id):
+        self._subset_id = subset_id
+        self.refresh()
+
+    def refresh(self):
+
+        self.clear()
+        self.beginResetModel()
+        if not self._subset_id:
+            self.endResetModel()
+            return
+
+        subset = io.find_one({"_id": self._subset_id})
+        if not subset:
+            self._subset_id = None
+            self.endResetModel()
+            return
+
+        versions = io.find({"type": "version", "parent": subset['_id']},
+                           sort=[("name", -1)],
+                           projection={"name": True,
+                                       "data.comment": True,
+                                       "data.time": True,
+                                       "data.author": True,
+                                       "data.source": True})
+
+        for version in versions:
+
+            node = Node()
+            node.update(version)
+
+            data = version.get("data", {})
+            node["version"] = "v{0:03d}".format(version["name"])
+            node["comment"] = data.get("comment", None)
+            node["author"] = data.get("author", None)
+            node["source"] = data.get("source", None)
+
+            # Define readable creation timestamp
+            created = version["data"]["time"]
+            created = datetime.datetime.strptime(created, "%Y%m%dT%H%M%SZ")
+            created = datetime.datetime.strftime(created, "%b %d %Y %H:%M")
+            node["time"] = created
+
+            self.add_child(node)
+
+        self.endResetModel()
 
 
 class FamiliesFilterProxyModel(QtCore.QSortFilterProxyModel):
