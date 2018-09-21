@@ -3,12 +3,12 @@ import time
 
 from ..projectmanager.widget import AssetWidget, AssetModel
 
-from ...vendor.Qt import QtWidgets, QtCore, QtGui
+from ...vendor.Qt import QtWidgets, QtCore
 from ... import api, io, style
 from .. import lib
 
 from .lib import refresh_family_config
-from .widgets import SubsetWidget, VersionsHistoryWidget, FamilyListWidget
+from .widgets import SubsetWidget, FamilyListWidget
 
 module = sys.modules[__name__]
 module.window = None
@@ -40,9 +40,8 @@ class Window(QtWidgets.QDialog):
         assets = AssetWidget()
         families = FamilyListWidget()
         subsets = SubsetWidget()
-        versions_history = VersionsHistoryWidget()
 
-        # Create splitter to show / hide family filters
+        # Create vertical splitter to show / hide family filters
         asset_filter_splitter = QtWidgets.QSplitter()
         asset_filter_splitter.setOrientation(QtCore.Qt.Vertical)
         asset_filter_splitter.addWidget(assets)
@@ -55,8 +54,11 @@ class Window(QtWidgets.QDialog):
         split = QtWidgets.QSplitter()
         split.addWidget(asset_filter_splitter)
         split.addWidget(subsets)
-        split.addWidget(versions_history)
-        split.setSizes([225, 925, 0])
+        split.setSizes([180, 950])
+
+        # Remove QSplitter border
+        split.setStyleSheet("QSplitter { border: 0px; }")
+
         container_layout.addWidget(split)
 
         body_layout = QtWidgets.QHBoxLayout(body)
@@ -78,8 +80,7 @@ class Window(QtWidgets.QDialog):
             "widgets": {"families": families},
             "model": {
                 "assets": assets,
-                "subsets": subsets,
-                "versions_history": versions_history,
+                "subsets": subsets
             },
             "label": {
                 "message": message,
@@ -101,12 +102,11 @@ class Window(QtWidgets.QDialog):
 
         families.active_changed.connect(subsets.set_family_filters)
         assets.selection_changed.connect(self.on_assetschanged)
-        subsets.active_changed.connect(self.on_subsetschanged)
 
         refresh_family_config()
 
         # Defaults
-        self.resize(1150, 700)
+        self.resize(1330, 700)
 
     # -------------------------------
     # Delay calling blocking methods
@@ -117,12 +117,8 @@ class Window(QtWidgets.QDialog):
         lib.schedule(self._refresh, 50, channel="mongo")
 
     def on_assetschanged(self, *args):
-        self.echo("Fetching results..")
+        self.echo("Fetching asset..")
         lib.schedule(self._assetschanged, 50, channel="mongo")
-
-    def on_subsetschanged(self, *args):
-        self.echo("Fetching results..")
-        lib.schedule(self._subsetschanged, 50, channel="mongo")
 
     def set_context(self, context, refresh=True):
         self.echo("Setting context: {}".format(context))
@@ -163,35 +159,15 @@ class Window(QtWidgets.QDialog):
 
         asset_item = assets_model.get_active_index()
         if asset_item is None or not asset_item.isValid():
+            subsets.set_asset(None)
             return
 
         document = asset_item.data(DocumentRole)
-        subsets_model.set_asset(document['_id'])
-
-        # Enforce the columns to fit the data (purely cosmetic)
-        rows = subsets_model.rowCount(QtCore.QModelIndex())
-        for i in range(rows):
-            subsets.view.resizeColumnToContents(i)
-
-        # Clear the version information on asset change
-        self.data['model']['versions_history'].set_subset(None)
+        subsets.set_asset(document['_id'])
 
         self.data["state"]["context"]["asset"] = document["name"]
         self.data["state"]["context"]["silo"] = document["silo"]
         self.echo("Duration: %.3fs" % (time.time() - t1))
-
-    def _subsetschanged(self):
-
-        subsets = self.data["model"]["subsets"]
-        index = subsets.view.currentIndex()
-        if not index:
-            self.data['model']['versions_history'].set_subset(None)
-            return
-
-        role = subsets.model.NodeRole
-        node = index.data(subsets.model.NodeRole)
-
-        self.data['model']['versions_history'].set_subset(node["_id"])
 
     def _set_context(self, context, refresh=True):
         """Set the selection in the interface using a context.

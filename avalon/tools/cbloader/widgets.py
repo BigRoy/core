@@ -1,3 +1,5 @@
+import datetime
+import math
 import inspect
 
 from ...vendor.Qt import QtWidgets, QtCore
@@ -6,9 +8,11 @@ from ... import io
 from ... import api
 from ... import pipeline
 
-from .model import SubsetsModel, VersionHistoryModel, FamiliesFilterProxyModel
+from .model import SubsetsModel, FamiliesFilterProxyModel
 from .delegates import PrettyTimeDelegate, VersionDelegate
 from . import lib
+
+from ..lib import schedule
 
 
 class SubsetWidget(QtWidgets.QWidget):
@@ -25,9 +29,20 @@ class SubsetWidget(QtWidgets.QWidget):
         family_proxy = FamiliesFilterProxyModel()
         family_proxy.setSourceModel(proxy)
 
+        # Header (filter + toggle details)
+        header = QtWidgets.QHBoxLayout()
+
         filter = QtWidgets.QLineEdit()
         filter.setPlaceholderText("Filter subsets..")
 
+        toggle_details = QtWidgets.QPushButton("Hide Details")
+        toggle_details.setFixedWidth(100)
+        toggle_details.setFixedHeight(22)
+
+        header.addWidget(filter)
+        header.addWidget(toggle_details)
+
+        # View
         view = QtWidgets.QTreeView()
         view.setIndentation(5)
         view.setStyleSheet("""
@@ -47,16 +62,32 @@ class SubsetWidget(QtWidgets.QWidget):
         column = model.COLUMNS.index("time")
         view.setItemDelegateForColumn(column, time_delegate)
 
-        layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(filter)
-        layout.addWidget(view)
-
         view.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         view.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
         view.setSortingEnabled(True)
         view.sortByColumn(1, QtCore.Qt.AscendingOrder)
         view.setAlternatingRowColors(True)
+
+        # Main body (left column)
+        body = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(body)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addLayout(header)
+        layout.addWidget(view)
+
+        # Details (right column)
+        details = SubsetDetailsWidget()
+
+        # Layout
+        layout = QtWidgets.QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        split = QtWidgets.QSplitter()
+        split.setStyleSheet("QSplitter { border: 0px; }")
+        split.addWidget(body)
+        split.addWidget(details)
+        split.setSizes([800, 200])
+        split.setCollapsible(1, False)
+        layout.addWidget(split)
 
         self.data = {
             "delegates": {
@@ -70,6 +101,8 @@ class SubsetWidget(QtWidgets.QWidget):
         self.view = view
         self.filter = filter
         self.family_proxy = family_proxy
+        self.details = details
+        self.toggle_details = toggle_details
 
         # settings and connections
         self.proxy.setSourceModel(self.model)
@@ -82,12 +115,36 @@ class SubsetWidget(QtWidgets.QWidget):
         selection = view.selectionModel()
         selection.selectionChanged.connect(self.active_changed)
 
+        version_delegate.version_changed.connect(self.version_changed)
+
         self.filter.textChanged.connect(self.proxy.setFilterRegExp)
+        self.active_changed.connect(self.on_versionschanged)
+        self.version_changed.connect(self.on_versionschanged)
+        self.toggle_details.clicked.connect(self.on_toggle_details)
 
         self.model.refresh()
 
         # Expose this from the widget as a method
         self.set_family_filters = self.family_proxy.setFamiliesFilter
+
+    def set_asset(self, asset_id):
+
+        # Clear previous
+        self.model.clear()
+
+        # Force a refresh on details widget (not sure why needed)
+        # TODO: Figure out how to avoid needing this here
+        self.on_versionschanged()
+
+        if not asset_id:
+            return
+
+        self.model.set_asset(asset_id)
+
+        # Enforce the columns to fit the data (purely cosmetic)
+        rows = self.model.rowCount(QtCore.QModelIndex())
+        for i in range(rows):
+            self.view.resizeColumnToContents(i)
 
     def on_context_menu(self, point):
 
@@ -184,19 +241,19 @@ class SubsetWidget(QtWidgets.QWidget):
         # Trigger
         for row in rows:
             node = row.data(self.model.NodeRole)
-            version_id = node['version_document']['_id']
+            version_id = node["version_document"]["_id"]
             representation = io.find_one({"type": "representation",
                                           "name": representation_name,
                                           "parent": version_id})
             if not representation:
                 self.echo("Subset '{}' has no representation '{}'".format(
-                        node['subset'],
-                        representation_name
-                ))
+                          node["subset"],
+                          representation_name
+                          ))
                 continue
 
             try:
-                api.load(Loader=loader, representation=representation['_id'])
+                api.load(Loader=loader, representation=representation)
             except pipeline.IncompatibleLoaderError as exc:
                 self.echo(exc)
                 continue
@@ -204,58 +261,212 @@ class SubsetWidget(QtWidgets.QWidget):
     def echo(self, message):
         print(message)
 
+    def on_versionschanged(self, *args):
+        self.echo("Fetching version..")
+        schedule(self._versionschanged, 150, channel="mongo")
 
-class VersionsHistoryWidget(QtWidgets.QWidget):
-    """
+    def _versionschanged(self):
 
-    For a subset show the history of published versions with:
-        - version
-        - comment
-        - date
-        - author
+        selection = self.view.selectionModel()
 
-    """
+        # Active must be in the selected rows otherwise we
+        # assume it's not actually an "active" current index.
+        version = None
+        active = selection.currentIndex()
+        if active:
+            rows = selection.selectedRows(column=active.column())
+            if active in rows:
+                node = active.data(self.model.NodeRole)
+                version = node['version_document']['_id']
 
+        self.details.set_version(version)
+
+    def on_toggle_details(self):
+
+        state = not self.details.isHidden()
+
+        if not state:
+            self.details.show()
+            self.toggle_details.setText("Hide Details")
+        else:
+            self.details.hide()
+            self.toggle_details.setText("Show Details")
+
+
+class VersionHistory(QtWidgets.QListWidget):
+    """A list of a subset's version history"""
+    def __init__(self):
+        super(VersionHistory, self).__init__()
+        self.setSpacing(1)
+
+        # For now disable any selections
+        self.setSelectionMode(self.NoSelection)
+
+    def set_subset(self, subset):
+        self.clear()
+
+        versions = io.find({"type": "version",
+                            "parent": subset},
+                           sort=[("name", -1)])
+        for version in versions:
+            self._add_version(version)
+
+    def _add_version(self, version):
+        """
+
+        --------------
+        version (date)
+        user: comment
+        --------------
+        """
+
+        widget = QtWidgets.QWidget()
+        widget.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        widget.setContentsMargins(0, 0, 0, 0)
+        widget.setObjectName("frame")
+        widget.setStyleSheet("#frame { "
+                             "margin: 2px; "
+                             "background-color: rgba(45, 45, 45, 0.9); "
+                             "}")
+
+        item = QtWidgets.QListWidgetItem(self)
+        self.addItem(item)
+        self.setItemWidget(item, widget)
+
+        layout = QtWidgets.QVBoxLayout(widget)
+        layout.setContentsMargins(5, 5, 5, 5)
+        widget.setLayout(layout)
+
+        header = QtWidgets.QHBoxLayout()
+
+        version_name = "Version {0:03d}".format(version['name'])
+        version_data = version["data"]
+
+        created = version_data["time"]
+        created = datetime.datetime.strptime(created, "%Y%m%dT%H%M%SZ")
+        created = datetime.datetime.strftime(created, "%Y-%m-%d %H:%M")
+
+        comment = version_data.get("comment") or "-"
+        if "author" in version_data:
+            comment = "<i>{0}</i>: ".format(version_data["author"]) + comment
+
+        # Version label
+        version_label = QtWidgets.QLabel(version_name)
+        version_label.setStyleSheet("QLabel { "
+                                    "font-size: 11px; "
+                                    "font-weight: bold; "
+                                    "color: #DDDDDD; "
+                                    "background: transparent; "
+                                    "}")
+        version_label.setSizePolicy(QtWidgets.QSizePolicy.Preferred,
+                                    QtWidgets.QSizePolicy.Fixed)
+        version_label.setAutoFillBackground(False)
+
+        # Date label
+        date_label = QtWidgets.QLabel(created)
+        date_label.setStyleSheet("QLabel { "
+                                 "font-size: 10px; "
+                                 "background: transparent; "
+                                 "}")
+        date_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        date_label.setSizePolicy(QtWidgets.QSizePolicy.Preferred,
+                                 QtWidgets.QSizePolicy.Fixed)
+        date_label.setAutoFillBackground(False)
+
+        # Comment label
+        comment_label = QtWidgets.QLabel(comment)
+        comment_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+        comment_label.setAutoFillBackground(False)
+        comment_label.setStyleSheet("QLabel { background: transparent; }")
+        comment_label.setWordWrap(True)
+
+        header.addWidget(version_label)
+        header.addWidget(date_label)
+        layout.addLayout(header)
+        layout.addWidget(comment_label)
+
+        item.setSizeHint(QtCore.QSize(0, 55))
+
+
+class SubsetDetailsWidget(QtWidgets.QWidget):
+    """A Widget that display information about a specific version"""
     def __init__(self, parent=None):
-        super(VersionsHistoryWidget, self).__init__(parent=parent)
-
-        label = QtWidgets.QLabel("Version History")
-
-        model = VersionHistoryModel()
-
-        view = QtWidgets.QTreeView()
-        view.setIndentation(5)
-        view.setStyleSheet("""
-            QTreeView::item{
-                padding: 5px 1px;
-                border: 0px;
-            }
-        """)
-        view.setAlternatingRowColors(True)
-        view.setAllColumnsShowFocus(True)
-        view.setModel(model)
-
-        # Stretch comment column by default since it's only field that
-        # can really contain easily growing data
-        header = view.header()
-        header.setStretchLastSection(False)
-        header.setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
-
-        view.setColumnWidth(0, 50)
-        view.setColumnWidth(1, 200)
-        view.setColumnWidth(2, 125)
-        view.setColumnWidth(3, 80)
+        super(SubsetDetailsWidget, self).__init__(parent=parent)
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(label)
-        layout.addWidget(view)
+        stack = QtWidgets.QStackedWidget()
+        layout.addWidget(stack)
 
-        self.model = model
-        self.view = view
+        self.setMinimumWidth(220)
 
-    def set_subset(self, subset_id):
-        self.model.set_subset(subset_id)
+        deselected = QtWidgets.QLabel("Select a subset for details.")
+        deselected.setAlignment(QtCore.Qt.AlignCenter)
+        details = QtWidgets.QWidget(self)
+
+        stack.addWidget(deselected)
+        stack.addWidget(details)
+
+        details_layout = QtWidgets.QVBoxLayout(details)
+        details_layout.setContentsMargins(0, 0, 0, 0)
+        thumb = QtWidgets.QLabel()
+        thumb.setAlignment(QtCore.Qt.AlignCenter)
+        thumb.setFixedHeight(50)
+        thumb_default = qtawesome.icon("fa.file-o",
+                                       color="white").pixmap(50, 50)
+        thumb.setPixmap(thumb_default)
+
+        label = QtWidgets.QLabel("Label")
+        label.setAlignment(QtCore.Qt.AlignCenter)
+        label.setStyleSheet("QLabel{ font-size: 14px; font-weight: bold; }")
+
+        history = VersionHistory()
+
+        details_layout.addWidget(thumb, QtCore.Qt.AlignCenter)
+        details_layout.addWidget(label)
+        details_layout.addWidget(history)
+
+        self.stack = stack
+
+        self.thumb_default = thumb_default
+        self.widgets = {
+            "label": label,
+            "thumb": thumb,
+            "history": history
+        }
+
+    def set_version(self, version_id):
+
+        if not version_id:
+            print("No version selected.")
+            self.stack.setCurrentIndex(0)
+            return
+
+        self.stack.setCurrentIndex(1)
+
+        version = io.find_one({"_id": version_id, "type": "version"})
+        assert version, "Not a valid version id"
+
+        subset = io.find_one({"_id": version['parent'], "type": "subset"})
+        assert subset, "No valid subset parent for version"
+
+        # Get Family label and icon
+        families = version["data"].get("families")
+        if families:
+            primary_family = families[0]
+        else:
+            primary_family = version["data"].get("family", "unknown")
+
+        family = lib.get(lib.FAMILY_CONFIG, primary_family)
+        icon = family.get("icon")
+        if icon:
+            pixmap = icon.pixmap(50, 50)
+        else:
+            pixmap = self.thumb_default
+
+        self.widgets["label"].setText(subset['name'])
+        self.widgets["thumb"].setPixmap(pixmap)
+        self.widgets["history"].set_subset(subset["_id"])
 
 
 class FamilyListWidget(QtWidgets.QListWidget):
