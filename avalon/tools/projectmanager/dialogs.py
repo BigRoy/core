@@ -1,6 +1,7 @@
 from ... import io
 from ...vendor import qtawesome as qta
 from ...vendor.Qt import QtWidgets, QtCore
+from ...vendor.jsonschema.exceptions import ValidationError
 from . import lib
 
 
@@ -188,7 +189,7 @@ class AssetCreateDialog(QtWidgets.QDialog):
 
         try:
             lib.create_asset(data)
-        except (RuntimeError, AssertionError) as exc:
+        except (RuntimeError, AssertionError, ValidationError) as exc:
             QtWidgets.QMessageBox.critical(self, "Add asset failed",
                                            str(exc))
             return
