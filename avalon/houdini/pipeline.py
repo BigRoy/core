@@ -153,7 +153,7 @@ def containerise(name,
                  nodes,
                  context,
                  loader=None,
-                 suffix=""):
+                 suffix="CON"):
     """Bundle `nodes` into a subnet and imprint it with metadata
 
     Containerisation enables a tracking of version, author and origin
@@ -180,7 +180,9 @@ def containerise(name,
                                         node_name="AVALON_CONTAINERS")
 
     # Create proper container name
-    container_name = "{}_{}".format(name, suffix or "CON")
+    container_name = name
+    if suffix:
+        container_name = "{0}_{1}".format(container_name, suffix)
     container = hou.node("/obj/{}".format(name))
     container.setName(container_name)
 
