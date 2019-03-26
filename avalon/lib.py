@@ -99,11 +99,13 @@ def dict_format(original, **kwargs):
         return new_list
 
 
-def which(program):
+def which(program, env=None):
     """Locate `program` in PATH
 
     Arguments:
         program (str): Name of program, e.g. "python"
+        env (dict, Optional): When provided it will act as the custom
+            environment to look in, else current os.environ will be used.
 
     """
 
@@ -112,8 +114,10 @@ def which(program):
             return True
         return False
 
-    for path in os.environ["PATH"].split(os.pathsep):
-        for ext in os.getenv("PATHEXT", "").split(os.pathsep):
+    env = env or os.environ
+
+    for path in env["PATH"].split(os.pathsep):
+        for ext in env.get("PATHEXT", "").split(os.pathsep):
             fname = program + ext.lower()
             abspath = os.path.join(path.strip('"'), fname)
 
