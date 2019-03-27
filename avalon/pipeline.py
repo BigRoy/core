@@ -423,11 +423,12 @@ class Application(Action):
 
     def launch(self, environment):
 
-        executable = lib.which(self.config["executable"])
+        executable = lib.which(self.config["executable"],
+                               env=environment)
         if executable is None:
             raise ValueError(
                 "'%s' not found on your PATH\n%s"
-                % (self.config["executable"], os.getenv("PATH"))
+                % (self.config["executable"], environment.get("PATH"))
             )
 
         args = self.config.get("args", [])
