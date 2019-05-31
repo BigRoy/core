@@ -62,8 +62,11 @@ def imprint(node, data):
 
 
 def lsattr(attr, value=None):
-    nodes = list(hou.node("/obj").allNodes())
     if value is None:
+        # Use allSubChildren() as allNodes() errors on nodes without
+        # permission to enter without a means to continue of querying
+        # the rest
+        nodes = hou.node("/obj").allSubChildren()
         return [n for n in nodes if n.parm(attr)]
     return lsattrs({attr: value})
 
@@ -85,7 +88,10 @@ def lsattrs(attrs):
     """
 
     matches = set()
-    nodes = list(hou.node("/obj").allNodes())  # returns generator object
+    # Use allSubChildren() as allNodes() errors on nodes without
+    # permission to enter without a means to continue of querying
+    # the rest
+    nodes = hou.node("/obj").allSubChildren()
     for node in nodes:
         for attr in attrs:
             if not node.parm(attr):
