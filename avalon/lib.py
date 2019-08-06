@@ -230,6 +230,30 @@ def launch(executable, args=None, environment=None, cwd=None):
         if IS_WIN32:
             kwargs["creationflags"] = CREATE_NO_WINDOW
 
+    # Use Rez to build env and launch when AVALON_TOOLS is provided
+    # This is temporarily done here so it just directly works with
+    # the current launcher's get_apps() function discovery upon
+    # entering a project.
+    # todo(roy): Push this outside of Avalon core
+    tools = environment.get("AVALON_TOOLS", "")
+    package_requests = tools.strip().split(" ")
+    if package_requests:
+        from rez.resolved_context import ResolvedContext
+
+        r = ResolvedContext(package_requests)
+
+        # Pass non-rez environment solely as parent environment
+        kwargs["parent_environ"] = kwargs.pop("env")
+
+        # Remove kwargs not support by rez' execute command
+        kwargs.pop("universal_newlines", None)
+
+        # Print the Rez resolve info (easier debugging)
+        r.print_info()
+
+        return r.execute_command(**kwargs)
+
+    # Fallback to regular subprocess if no AVALON_TOOLS
     popen = subprocess.Popen(**kwargs)
 
     return popen

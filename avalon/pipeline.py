@@ -423,18 +423,9 @@ class Application(Action):
 
     def launch(self, environment):
 
-        executable = lib.which(self.config["executable"],
-                               env=environment)
-        if executable is None:
-            raise ValueError(
-                "'%s' not found on your PATH\n%s"
-                % (self.config["executable"], environment.get("PATH"))
-            )
-
-        args = self.config.get("args", [])
         return lib.launch(
-            executable=executable,
-            args=args,
+            executable=self.config["executable"],
+            args=self.config.get("args", []),
             environment=environment,
             cwd=environment["AVALON_WORKDIR"]
         )
@@ -448,22 +439,6 @@ class Application(Action):
             self.initialize(environment)
 
         if kwargs.get("launch", True):
-
-            # todo(roy): Push this outside of Avalon core
-            # This is temporarily done here so it just directly works with
-            # the current launcher's get_apps() function discovery upon
-            # entering
-            # a project.
-            tools = environment.get("AVALON_TOOLS", "").split(";")
-            if tools:
-                # Launch through acre when AVALON TOOLS is provided.
-                import acre
-
-                # Build Application environment using Acre
-                tools_env = acre.get_tools(tools)
-                env = acre.compute(tools_env)
-                environment = acre.merge(env, current_env=environment)
-
             return self.launch(environment)
 
     def _format(self, original, **kwargs):
