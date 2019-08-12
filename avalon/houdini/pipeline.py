@@ -232,17 +232,19 @@ def parse_container(container, validate=True):
 
 
 def ls():
-    containers = []
-    for identifier in (AVALON_CONTAINER_ID,
-                       "pyblish.mindbender.container"):
-        containers += lib.lsattr("id", identifier)
+    containers = lib.lsattr("id", AVALON_CONTAINER_ID)
+
+    # Query whether config has `collect_container_metadata` only once.
+    has_metadata_collector = False
+    config = find_host_config(api.registered_config())
+    if hasattr(config, "collect_container_metadata"):
+        has_metadata_collector = True
 
     for container in sorted(containers):
         data = parse_container(container)
 
         # Collect custom data if attribute is present
-        config = find_host_config(api.registered_config())
-        if hasattr(config, "collect_container_metadata"):
+        if has_metadata_collector:
             metadata = config.collect_container_metadata(container)
             data.update(metadata)
 
