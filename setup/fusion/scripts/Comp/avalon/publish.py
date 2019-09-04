@@ -24,7 +24,7 @@ def _set_current_working_dir():
 
     try:
         # Provided by Fusion
-        comp
+        global comp
     except NameError:
         comp = None
 
