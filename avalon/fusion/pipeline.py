@@ -27,12 +27,19 @@ def ls():
 
     comp = get_current_comp()
     tools = comp.GetToolList(False, "Loader").values()
+
+    # Query whether config has `collect_container_metadata` only once.
+    has_metadata_collector = False
+    config = find_host_config(api.registered_config())
+    if hasattr(config, "collect_container_metadata"):
+        has_metadata_collector = True
+
     for tool in tools:
         container = parse_container(tool)
         if container:
+
             # Collect custom data if attribute is present
-            config = find_host_config(avalon.registered_config())
-            if hasattr(config, "collect_container_metadata"):
+            if has_metadata_collector:
                 metadata = config.collect_container_metadata(container)
                 container.update(metadata)
 

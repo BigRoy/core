@@ -1,4 +1,3 @@
-
 import sys
 import inspect
 
@@ -6,6 +5,7 @@ from ...vendor.Qt import QtWidgets, QtCore, QtGui
 from ...vendor import qtawesome
 from ...vendor import six
 from ... import api, io, style
+
 from .. import lib
 
 module = sys.modules[__name__]
@@ -139,8 +139,8 @@ class Window(QtWidgets.QDialog):
         create_btn.setEnabled(False)
 
     def _on_state_changed(self, state):
-        self.state['valid'] = state
-        self.data['Create Button'].setEnabled(state)
+        self.state["valid"] = state
+        self.data["Create Button"].setEnabled(state)
 
     def _build_menu(self, default_names):
         """Create optional predefined subset names
@@ -191,21 +191,28 @@ class Window(QtWidgets.QDialog):
         subset_name = subset.text()
         asset_name = asset_name.text()
 
-        # Get the assets from the database which match with the name
-        assets_db = io.find(filter={"type": "asset"}, projection={"name": 1})
-        assets = [asset for asset in assets_db if asset_name in asset["name"]]
+        # Early exit if no asset name
+        if not asset_name.strip():
+            self._build_menu([])
+            item.setData(ExistsRole, False)
+            self.echo("Asset name is required ..")
+            self.stateChanged.emit(False)
+            return
 
-        if assets:
+        # Get the asset from the database which match with the name
+        asset = io.find_one({"name": asset_name, "type": "asset"},
+                            projection={"_id": 1})
+
+        if asset:
             # Get plugin and family
             plugin = item.data(PluginRole)
             family = plugin.family.rsplit(".", 1)[-1]
 
             # Get all subsets of the current asset
-            asset_ids = [asset["_id"] for asset in assets]
             subsets = io.find(filter={"type": "subset",
                                       "name": {"$regex": "{}*".format(family),
                                                "$options": "i"},
-                                      "parent": {"$in": asset_ids}}) or []
+                                      "parent": asset["_id"]}) or []
 
             # Get all subsets' their subset name, "Default", "High", "Low"
             existed_subsets = [sub["name"].split(family)[-1]
@@ -227,17 +234,27 @@ class Window(QtWidgets.QDialog):
                 subset_name = subset_name[0].upper() + subset_name[1:]
             result.setText("{}{}".format(family, subset_name))
 
+            # Indicate subset existence
+            if not subset_name:
+                subset.setStyleSheet("")
+                message = "Empty subset name .."
+            elif subset_name in existed_subsets:
+                subset.setStyleSheet("border-color: #4E76BB;")
+                message = "Existing subset, appending next version."
+            else:  # New subset
+                subset.setStyleSheet("border-color: #7AAB8F;")
+                message = "New subset, creating first version."
+
             item.setData(ExistsRole, True)
-            self.echo("Ready ..")
+            self.echo(message)
         else:
             self._build_menu([])
             item.setData(ExistsRole, False)
-            self.echo("'%s' not found .." % asset_name)
+            self.echo("Asset '%s' not found .." % asset_name)
 
         # Update the valid state
         valid = (
             subset_name.strip() != "" and
-            asset_name.strip() != "" and
             item.data(QtCore.Qt.ItemIsEnabled) and
             item.data(ExistsRole)
         )
@@ -311,7 +328,7 @@ class Window(QtWidgets.QDialog):
     def on_create(self):
 
         # Do not allow creation in an invalid state
-        if not self.state['valid']:
+        if not self.state["valid"]:
             return
 
         asset = self.data["Asset"]
@@ -415,7 +432,7 @@ class FamilyDescriptionWidget(QtWidgets.QWidget):
         """Update elements to display information of a family item.
 
         Args:
-            family (dict): A family item as registered with name, help and icon
+            item (dict): A family item as registered with name, help and icon
 
         Returns:
             None
@@ -445,11 +462,10 @@ def show(debug=False, parent=None):
     """Display asset creator GUI
 
     Arguments:
-        creator (func, optional): Callable function, passed `name`,
-            `family` and `use_selection`, defaults to `creator`
-            defined in :mod:`pipeline`
         debug (bool, optional): Run loader in debug-mode,
             defaults to False
+        parent (QtCore.QObject, optional): When provided parent the interface
+            to this QObject.
 
     """
 
