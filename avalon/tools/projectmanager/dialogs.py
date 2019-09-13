@@ -1,7 +1,8 @@
 from ... import io
-from ...vendor import qtawesome as qta
+from ...vendor import qtawesome
 from ...vendor.Qt import QtWidgets, QtCore
 from ...vendor.jsonschema.exceptions import ValidationError
+
 from . import lib
 
 
@@ -25,7 +26,7 @@ class TasksCreateDialog(QtWidgets.QDialog):
 
         footer = QtWidgets.QHBoxLayout()
         cancel = QtWidgets.QPushButton("Cancel")
-        create = QtWidgets.QPushButton(qta.icon("fa.plus", color="grey"),
+        create = QtWidgets.QPushButton(qtawesome.icon("fa.plus", color="grey"),
                                        "Create")
         footer.addWidget(create)
         footer.addWidget(cancel)
@@ -82,7 +83,7 @@ class AssetCreateDialog(QtWidgets.QDialog):
         name.setReadOnly(True)
         name.setStyleSheet("background-color: #333333;")  # greyed out
 
-        icon = qta.icon("fa.plus", color="grey")
+        icon = qtawesome.icon("fa.plus", color="grey")
         add_asset = QtWidgets.QPushButton(icon, "Add")
         add_asset.setAutoDefault(True)
 
@@ -122,7 +123,7 @@ class AssetCreateDialog(QtWidgets.QDialog):
         if parent_id:
             parent_asset = io.find_one({"_id": parent_id, "type": "asset"})
             assert parent_asset, "Parent asset does not exist."
-            parent_name = parent_asset['name']
+            parent_name = parent_asset["name"]
 
             self.parent_name = parent_name
             self.parent_id = parent_id
@@ -131,7 +132,7 @@ class AssetCreateDialog(QtWidgets.QDialog):
             self.parent_name = ""
             self.parent_id = None
 
-        self.data['label']['parent'].setText(parent_name)
+        self.data["label"]["parent"].setText(parent_name)
 
     def update_name(self):
         """Force an update on the long name.
@@ -141,20 +142,20 @@ class AssetCreateDialog(QtWidgets.QDialog):
 
         """
 
-        label = self.data['label']['label'].text()
+        label = self.data["label"]["label"].text()
         name = label
 
         # Prefix with parent name (if parent)
         if self.parent_name:
             name = self.parent_name + "_" + name
 
-        self.data['label']['name'].setText(name)
+        self.data["label"]["name"].setText(name)
 
     def on_add_asset(self):
 
         parent_id = self.parent_id
-        name = self.data['label']['name'].text()
-        label = self.data['label']['label'].text()
+        name = self.data["label"]["name"].text()
+        label = self.data["label"]["label"].text()
         silo = self.silo
 
         if not label:
@@ -184,8 +185,8 @@ class AssetCreateDialog(QtWidgets.QDialog):
         if parent_id:
             parent = io.find_one({"_id": io.ObjectId(parent_id)})
             if parent:
-                group = parent['name']
-                data['group'] = group
+                group = parent["name"]
+                data["group"] = group
 
         try:
             lib.create_asset(data)
