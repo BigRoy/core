@@ -1063,8 +1063,7 @@ QToolButton::menu-arrow:open {
 
 QPushButton::menu-indicator  {
     subcontrol-origin: padding;
-    subcontrol-position: bottom right;
-    left: 8px;
+    subcontrol-position: right;
 }
 
 QTableView
