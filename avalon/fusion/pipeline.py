@@ -2,10 +2,11 @@ import sys
 import contextlib
 import importlib
 import logging
-import pyblish.api
+from pyblish import api as pyblish
+from avalon import api as avalon
 
-from .. import api
 from ..pipeline import AVALON_CONTAINER_ID
+
 
 class CompLogHandler(logging.Handler):
     def emit(self, record):
@@ -66,7 +67,7 @@ def install(config):
     # TODO: Set project
     # TODO: Install Fusion menu (this is done with config .fu script actually)
 
-    pyblish.api.register_host("fusion")
+    pyblish.register_host("fusion")
 
     # Remove all handlers associated with the root logger object, because
     # that one sometimes logs as "warnings" incorrectly.
