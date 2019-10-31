@@ -428,6 +428,8 @@ def parse_container(container, validate=True):
 
     Args:
         container (str): A container node name.
+        validate (bool, optional): Whether to validate the container schema.
+            Defaults to True.
 
     Returns:
         dict: The container schema data for this container node.
@@ -488,11 +490,14 @@ def _ls():
 
 
 def ls():
-    """List containers from active Maya scene
+    """Yields containers from active Maya scene
 
     This is the host-equivalent of api.ls(), but instead of listing
     assets on disk, it lists assets already loaded in Maya; once loaded
     they are called 'containers'
+
+    Yields:
+        dict: container
 
     """
     container_names = _ls()
