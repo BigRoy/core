@@ -1,15 +1,15 @@
 import os
-from collections import OrderedDict
 import importlib
-from .. import api, io, schema
-
 import contextlib
-from pyblish import api as pyblish
-from ..vendor import toml
 import logging
-import nuke
-from . import lib
+from collections import OrderedDict
 
+import nuke
+from pyblish import api as pyblish
+
+from . import lib
+from .. import api, io
+from ..vendor import toml
 from ..pipeline import AVALON_CONTAINER_ID
 
 log = logging.getLogger(__name__)
@@ -99,7 +99,7 @@ def containerise(node,
     return node
 
 
-def parse_container(node, validate=True):
+def parse_container(node):
     """Returns containerised data of a node
 
     This reads the imprinted data from `containerise`.
@@ -114,9 +114,6 @@ def parse_container(node, validate=True):
 
     # Store the node's name
     data["objectName"] = node["name"].value()
-
-    if validate:
-        schema.validate(data)
 
     return data
 
@@ -241,15 +238,12 @@ def uninstall(config):
 def _install_menu():
     from ..tools import (
         creator,
-        # publish,
+        publish,
         workfiles,
         loader,
         sceneinventory,
         contextmanager
     )
-    # for now we are using `lite` version
-    # TODO: just for now untill qml in Nuke will be fixed (pyblish-qml#301)
-    import pyblish_lite as publish
 
     # Create menu
     menubar = nuke.menu("Nuke")
