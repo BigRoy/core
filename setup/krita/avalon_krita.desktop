@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Service
+ServiceTypes=Krita/PythonPlugin
+X-KDE-Library=avalon_krita
+X-Python-2-Compatible=true
+Name=Avalon Plugin
+Comment=Open-source pipeline Avalon Krita plugin.
