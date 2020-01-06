@@ -9,9 +9,7 @@ from .pipeline import (
     uninstall,
     ls,
     imprint_container,
-    parse_container,
-    get_current_clarisseproject,
-    clarisse_project_file_lock_and_undo_chunk
+    parse_container
 )
 
 from .workio import (
@@ -28,12 +26,8 @@ from .lib import (
 )
 
 from .command import (
-    ix_select,
-    get_or_create_ctx,
-    ix_create_avalon_item,
     reset_frame_range,
-    reset_resolution,
-    ix_load_referenced_file
+    reset_resolution
 )
 
 __all__ = [
@@ -44,9 +38,6 @@ __all__ = [
     "imprint_container",
     "parse_container",
 
-    "get_current_clarisseproject",
-    "clarisse_project_file_lock_and_undo_chunk",
-
     # Workfiles API
     "open_file",
     "save_file",
@@ -55,9 +46,6 @@ __all__ = [
     "file_extensions",
     "work_root",
 
-    "ix_create_avalon_item",
-    "ix_select",
-    "get_or_create_ctx",
     "maintained_selection"
 
 ]
