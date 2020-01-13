@@ -8,7 +8,7 @@ def children_as_string(node):
     return [c.name() for c in node.children()]
 
 
-def imprint(node, data):
+def imprint(node, data, folder="Extra"):
     """Store attributes with value on a node
 
     Depending on the type of attribute it creates the correct parameter
@@ -20,6 +20,8 @@ def imprint(node, data):
     Args:
         node(hou.Node): node object from Houdini
         data(dict): collection of attributes and their value
+        folder (str, optional): The name of the folder to put the
+            imprinted data in. Defaults to "Extra".
 
     Returns:
         None
@@ -28,7 +30,7 @@ def imprint(node, data):
 
     parm_group = node.parmTemplateGroup()
 
-    parm_folder = hou.FolderParmTemplate("folder", "Extra")
+    parm_folder = hou.FolderParmTemplate("folder", folder)
     for key, value in data.items():
         if value is None:
             continue
