@@ -272,6 +272,7 @@ class Creator(api.Creator):
     def __init__(self, *args, **kwargs):
         super(Creator, self).__init__(*args, **kwargs)
         self.nodes = list()
+        self.parent = hou.node("/out")
 
     def process(self):
         """This is the base functionality to create instances in Houdini
@@ -288,7 +289,7 @@ class Creator(api.Creator):
 
             def process(self):
                 instance =  super(CreateEpicNode, self, process()
-                # Set paramaters for Alembic node
+                # Set parameters for Alembic node
                 instance.setParms(
                     {"sop_path": "$HIP/%s.abc" % self.nodes[0]}
                 )
@@ -307,8 +308,7 @@ class Creator(api.Creator):
             node_type = "geometry"
 
         # Get out node
-        out = hou.node("/out")
-        instance = out.createNode(node_type, node_name=self.name)
+        instance = self.parent.createNode(node_type, node_name=self.name)
         instance.moveToGoodPosition()
 
         lib.imprint(instance, self.data)
