@@ -10,8 +10,8 @@ import hou
 
 # Local libraries
 from . import lib
-from ..lib import logger
-from avalon import api, schema
+from ..lib import logger, find_submodule
+from .. import api
 
 from ..pipeline import AVALON_CONTAINER_ID
 
@@ -24,7 +24,7 @@ AVALON_CONTAINERS = "/obj/AVALON_CONTAINERS"
 IS_HEADLESS = not hasattr(hou, "ui")
 
 
-def install(config):
+def install():
     """Setup integration
     Register plug-ins and integrate into the host
 
@@ -39,40 +39,16 @@ def install(config):
 
     self._has_been_setup = True
 
-    config = find_host_config(config)
-    if hasattr(config, "install"):
-        config.install()
 
-
-def uninstall(config):
+def uninstall():
     """Uninstall Houdini-specific functionality of avalon-core.
 
     This function is called automatically on calling `api.uninstall()`.
-
-    Args:
-        config: configuration module
-
     """
-
-    config = find_host_config(config)
-    if hasattr(config, "uninstall"):
-        config.uninstall()
 
     pyblish.api.deregister_host("hython")
     pyblish.api.deregister_host("hpython")
     pyblish.api.deregister_host("houdini")
-
-
-def find_host_config(config):
-    config_name = config.__name__
-    try:
-        config = importlib.import_module(config_name + ".houdini")
-    except ImportError as exc:
-        if str(exc) != "No module name {}".format(config_name + ".houdini"):
-            raise
-        config = None
-
-    return config
 
 
 def get_main_window():
@@ -88,8 +64,6 @@ def reload_pipeline(*args):
     CAUTION: This is primarily for development and debugging purposes.
 
     """
-
-    import importlib
 
     api.uninstall()
 
@@ -237,8 +211,8 @@ def ls():
 
     # Query whether config has `collect_container_metadata` only once.
     has_metadata_collector = False
-    config = find_host_config(api.registered_config())
-    if hasattr(config, "collect_container_metadata"):
+    config_host = find_submodule(api.registered_config(), "houdini")
+    if hasattr(config_host, "collect_container_metadata"):
         has_metadata_collector = True
 
     for container in sorted(containers):
@@ -246,7 +220,7 @@ def ls():
 
         # Collect custom data if attribute is present
         if has_metadata_collector:
-            metadata = config.collect_container_metadata(container)
+            metadata = config_host.collect_container_metadata(container)
             data.update(metadata)
 
         yield data
