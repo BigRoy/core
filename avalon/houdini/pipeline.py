@@ -285,7 +285,7 @@ class Creator(api.Creator):
         instance = self.parent.createNode(node_type, node_name=self.name)
         instance.moveToGoodPosition()
 
-        lib.imprint(instance, self.data)
+        lib.imprint(instance, self.data, folder="Avalon")
 
         return instance
 
