@@ -159,6 +159,11 @@ class Item(dict):
 
     def child(self, row):
 
+        # QComboBox seems to query for index() with row as -1, to capture
+        # that case we return that it's not a child without warning
+        if row < 0:
+            return
+
         if row >= len(self._children):
             log.warning("Invalid row as child: {0}".format(row))
             return
