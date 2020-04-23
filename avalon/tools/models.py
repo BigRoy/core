@@ -1,11 +1,15 @@
 import re
+import copy
 import logging
 import collections
 
 from ..vendor.Qt import QtCore, QtGui
 from ..vendor import qtawesome
-from .. import io
-from .. import style
+from .. import io, api, style
+from .. import lib
+
+from .lib import QtAwesomeIconCache
+
 
 log = logging.getLogger(__name__)
 
@@ -475,3 +479,157 @@ class RecursiveSortFilterProxyModel(QtCore.QSortFilterProxyModel):
 
         return super(RecursiveSortFilterProxyModel,
                      self).filterAcceptsRow(row, parent)
+
+
+class ProjectsModel(TreeModel):
+    """List of projects"""
+
+    Columns = ["name"]
+
+    def __init__(self, parent=None):
+        super(ProjectsModel, self).__init__(parent=parent)
+
+        self.hide_invisible = False
+        self.default_icons = {
+            "project": "map"
+        }
+
+    def refresh(self):
+
+        self.beginResetModel()
+        self.clear()
+        for project in self.get_projects():
+            self.add_child(Item(project))
+        self.endResetModel()
+
+    def get_projects(self):
+
+        projects = [
+            dict({
+                "_id": project["_id"],
+                "_document": project,
+                "icon": self.default_icons["project"],
+                "name": project["name"],
+            }, **project["data"])
+            for project in sorted(io.projects(), key=lambda x: x['name'])
+        ]
+
+        if self.hide_invisible:
+            projects = [x for x in projects if
+                        x["_document"].get("visible", True)]
+
+        return projects
+
+    def data(self, index, role):
+
+        if not index.isValid():
+            return
+
+        # Add icon to the first column
+        if role == QtCore.Qt.DecorationRole:
+            if index.column() == 0:
+                item = index.internalPointer()
+                name = "fa.%s" % item["icon"]
+                color = item.get("color") or "white"
+                return QtAwesomeIconCache.get(name, color=color)
+
+        return super(ProjectsModel, self).data(index, role)
+
+
+class ActionModel(TreeModel):
+
+    Columns = ["label"]
+
+    def __init__(self, parent=None):
+        super(ActionModel, self).__init__(parent=parent)
+
+        self._session = {}
+
+        # Cache of available actions
+        self._registered_actions = list()
+
+        self.discover()
+
+    def data(self, index, role):
+
+        if not index.isValid():
+            return
+
+        # Add icon to the first column
+        if role == QtCore.Qt.DecorationRole:
+            if index.column() == 0:
+                item = index.internalPointer()
+                return item.get("icon")
+
+        return super(ActionModel, self).data(index, role)
+
+    def discover(self):
+        """Set up Actions cache. Run this for each new project."""
+
+        # Discover all registered actions
+        actions = api.discover(api.Action)
+
+        # Get available project actions and the application actions
+        project = io.find_one({"type": "project"})
+        apps = lib.get_application_actions(project)
+        actions.extend(apps)
+
+        self._registered_actions[:] = actions
+
+    def refresh(self):
+
+        # Validate actions based on compatibility
+        actions = self.collect_compatible_actions(self._registered_actions)
+        self.beginResetModel()
+        self.clear()
+
+        for Action in actions:
+
+            icon_name = str(Action.icon or "cube")
+            icon_color = getattr(Action, "color", None) or "white"
+            icon = qtawesome.icon("fa.%s" % icon_name,
+                                  color=icon_color)
+
+            item = Item({
+                "name": str(Action.name),
+                "label": str(Action.label or Action.name),
+                "color": icon_color,
+                "order": Action.order,
+                "icon": icon,
+                "action": Action
+            })
+
+            self.add_child(item)
+        self.endResetModel()
+
+    def set_session(self, session):
+
+        assert isinstance(session, dict)
+        self._session = copy.deepcopy(session)
+        self.refresh()
+
+    def collect_compatible_actions(self, actions):
+        """Collect all actions which are compatible with the environment
+
+        Each compatible action will be translated to a dictionary to ensure
+        the action can be visualized in the launcher.
+
+        Args:
+            actions (list): list of classes
+
+        Returns:
+            list: collection of dictionaries sorted on order int he
+        """
+
+        compatible = []
+        for Action in actions:
+            if not Action().is_compatible(self._session):
+                continue
+
+            compatible.append(Action)
+
+        # Sort by order and name
+        compatible = sorted(compatible, key=lambda action: (action.order,
+                                                            action.name))
+
+        return compatible

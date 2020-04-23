@@ -307,3 +307,47 @@ def find_submodule(module, submodule):
             log_.warning("Could not find '%s' in module: %s",
                          submodule,
                          module)
+
+
+def get_application_actions(project):
+    """Define dynamic Application classes for project using `.toml` files
+
+    Args:
+        project (dict): project document from the database
+
+    Returns:
+        list: list of dictionaries
+    """
+
+    from . import pipeline
+
+    apps = []
+    for app in project["config"]["apps"]:
+        try:
+            app_definition = get_application(app['name'])
+        except Exception as exc:
+            print("Unable to load application: %s - %s" % (app['name'], exc))
+            continue
+
+        # Get from app definition, if not there from app in project
+        icon = app_definition.get("icon", app.get("icon", "folder-o"))
+        color = app_definition.get("color", app.get("color", None))
+        order = app_definition.get("order", app.get("order", 0))
+        label = app.get("label", app_definition.get("label", app["name"]))
+
+        action = type(
+            "app_%s" % app["name"],
+            (pipeline.Application,),
+            {
+                "name": app['name'],
+                "label": label,
+                "icon": icon,
+                "color": color,
+                "order": order,
+                "config": app_definition.copy()
+            }
+        )
+
+        apps.append(action)
+
+    return apps

@@ -382,3 +382,28 @@ def get_active_group_config(asset_id, include_predefined=False):
         })
 
     return ordered
+
+
+class QtAwesomeIconCache(object):
+    """Cache qtawesome icons as you retrieve them
+
+    E.g.
+        >>> QtAwesomeIconCache.get("fa.map", color="white")
+
+    """
+
+    cache = {}
+
+    @classmethod
+    def get(cls, name, color=None):
+
+        key = (name, color)
+        if key not in cls.cache:
+            icon = qtawesome.icon(name, color=color)
+            cls.cache[key] = icon
+
+        return cls.cache[key]
+
+    @classmethod
+    def clear(cls):
+        cls.cache.clear()
