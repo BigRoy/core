@@ -9,11 +9,11 @@ from ..vendor.Qt import QtWidgets, QtCore, QtGui
 
 self = sys.modules[__name__]
 self._jobs = dict()
-self._path = os.path.dirname(__file__)
+self._path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 
 
 def resource(*path):
-    path = os.path.join(self._path, "_res", *path)
+    path = os.path.join(self._path, "res", *path)
     return path.replace("\\", "/")
 
 
