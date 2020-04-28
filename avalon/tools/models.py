@@ -516,7 +516,7 @@ class ProjectsModel(TreeModel):
 
         if self.hide_invisible:
             projects = [x for x in projects if
-                        x["_document"].get("visible", True)]
+                        x.get("visible", True)]
 
         return projects
 
