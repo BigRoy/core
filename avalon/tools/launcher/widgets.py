@@ -5,6 +5,7 @@ from ... import io, api
 from ..widgets import AssetWidget
 from ..models import TasksModel, TreeModel, Item, ActionModel, ProjectsModel
 
+from .flickcharm import FlickCharm
 from . import lib
 
 
@@ -19,25 +20,27 @@ class ProjectBar(QtWidgets.QWidget):
 
         self.view = QtWidgets.QComboBox()
         self.model = ProjectsModel()
+        self.model.hide_invisible = True
         self.view.setModel(self.model)
         self.view.setRootModelIndex(QtCore.QModelIndex())
 
         layout.addWidget(self.view)
 
+        self.setSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding,
+                           QtWidgets.QSizePolicy.Maximum)
+
         # Initialize
         self.model.refresh()
-
-        # Set current project
-        project = api.Session["AVALON_PROJECT"]
-        index = self.view.findText(project)
-        if index >= 0:
-            self.view.setCurrentIndex(index)
 
         # Signals
         self.view.currentIndexChanged.connect(self.project_changed)
 
-        self.setSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding,
-                           QtWidgets.QSizePolicy.Maximum)
+        # Set current project by default if it's set.
+        project = api.Session.get("AVALON_PROJECT")
+        if project:
+            index = self.view.findText(project)
+            if index >= 0:
+                self.view.setCurrentIndex(index)
 
     def get_current_project(self):
         return self.view.currentText()
@@ -64,8 +67,6 @@ class ActionBar(QtWidgets.QWidget):
         view.setViewMode(QtWidgets.QListView.IconMode)
         view.setResizeMode(QtWidgets.QListView.Adjust)
         view.setSelectionMode(QtWidgets.QListView.NoSelection)
-        #view.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        #view.setFlow(QtWidgets.QListView.LeftToRight)
         view.setWrapping(True)
         view.setGridSize(QtCore.QSize(80, 75))
         view.setIconSize(QtCore.QSize(30, 30))
@@ -100,6 +101,10 @@ class ActionBar(QtWidgets.QWidget):
 
         self.model = model
         self.view = view
+
+        # Make view flickable
+        self._flick = FlickCharm()
+        self._flick.activateOn(view)
 
         self.set_row_height(1)
 
@@ -255,8 +260,6 @@ class ActionHistory(QtWidgets.QPushButton):
 
         largest_label_num_chars = 0
         largest_action_label = max(len(x[0].label) for x in self._history)
-        print(largest_action_label)
-
         action_session_role = QtCore.Qt.UserRole + 1
 
         for action, session in reversed(self._history):

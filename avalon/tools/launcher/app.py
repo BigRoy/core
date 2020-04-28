@@ -11,8 +11,84 @@ from .widgets import (
     ProjectBar, ActionBar, TasksWidget, ActionHistory, SlidePageWidget
 )
 
+from .flickcharm import FlickCharm
+
 module = sys.modules[__name__]
 module.window = None
+
+
+class IconListView(QtWidgets.QListView):
+
+    IconMode = 0
+    ListMode = 1
+
+    def __init__(self, parent=None, mode=ListMode):
+        super(IconListView, self).__init__(parent=parent)
+
+        # Workaround for scrolling being super slow or fast when
+        # toggling between the two visual modes
+        self.setVerticalScrollMode(self.ScrollPerPixel)
+
+        self._mode = 0
+        self.set_mode(mode)
+
+    def set_mode(self, mode):
+
+        if mode == self.IconMode:
+
+            self.setViewMode(QtWidgets.QListView.IconMode)
+            self.setResizeMode(QtWidgets.QListView.Adjust)
+            self.setWrapping(True)
+            self.setWordWrap(True)
+            self.setGridSize(QtCore.QSize(151, 90))
+            self.setIconSize(QtCore.QSize(50, 50))
+            self.setSpacing(0)
+            self.setAlternatingRowColors(False)
+
+            self.setStyleSheet("""
+            QListView {
+                font-size: 11px;
+                border: 0px;
+                padding: 0px;
+                margin: 0px;
+
+            }
+
+            QListView::item  {
+                margin-top: 6px;
+                /* Won't work without borders set */
+                border: 0px;
+            }
+
+            /* For icon only */
+            QListView::icon {
+                top: 3px;
+            }
+            """)
+
+            self.verticalScrollBar().setSingleStep(30)
+
+        elif self.ListMode:
+            self.setStyleSheet("")   # clear stylesheet
+            self.setViewMode(QtWidgets.QListView.ListMode)
+            self.setResizeMode(QtWidgets.QListView.Adjust)
+            self.setWrapping(False)
+            self.setWordWrap(False)
+            self.setIconSize(QtCore.QSize(20, 20))
+            self.setGridSize(QtCore.QSize(100, 25))
+            self.setSpacing(0)
+            self.setAlternatingRowColors(False)
+
+            self.verticalScrollBar().setSingleStep(33.33)
+
+        self._mode = mode
+
+    def mousePressEvent(self, event):
+
+        if event.button() == QtCore.Qt.RightButton:
+            self.set_mode(int(not self._mode))
+
+        return super(IconListView, self).mousePressEvent(event)
 
 
 class ProjectsPanel(QtWidgets.QWidget):
@@ -27,37 +103,13 @@ class ProjectsPanel(QtWidgets.QWidget):
 
         from ..models import ProjectsModel
 
-        view = QtWidgets.QListView()
-        view.setViewMode(QtWidgets.QListView.IconMode)
-        view.setResizeMode(QtWidgets.QListView.Adjust)
+        view = IconListView()
         view.setSelectionMode(QtWidgets.QListView.NoSelection)
-        view.setWrapping(True)
-        view.setGridSize(QtCore.QSize(151, 90))
-        view.setIconSize(QtCore.QSize(50, 50))
-        view.setSpacing(0)
-        view.setWordWrap(True)
-
-        view.setStyleSheet("""
-        QListView {
-            font-size: 11px;
-            border: 0px;
-            padding: 0px;
-            margin: 0px;
-            
-        }
-        
-        QListView::item  {
-            margin-top: 6px;
-            /* Won't work without borders set */
-            border: 0px;
-        }
-        
-        /* For icon only */
-        QListView::icon {
-            top: 3px;
-        }
-        """)
+        flick = FlickCharm()
+        flick.activateOn(view)
+        self._flick = flick
         model = ProjectsModel()
+        model.hide_invisible = True
         model.refresh()
         view.setModel(model)
 
@@ -97,6 +149,13 @@ class AssetsPanel(QtWidgets.QWidget):
         assets_widgets.setContentsMargins(0, 0, 0, 0)
         assets_layout = QtWidgets.QVBoxLayout(assets_widgets)
         assets = AssetWidget(silo_creatable=False)
+
+        # Make assets view flickable
+        flick = FlickCharm()
+        flick.activateOn(assets.view)
+        assets.view.setVerticalScrollMode(assets.view.ScrollPerPixel)
+        print("Set %s flickable.." % assets.view)
+        self._flick = flick
         assets_layout.addWidget(assets)
 
         # tasks
@@ -130,6 +189,12 @@ class AssetsPanel(QtWidgets.QWidget):
         projects.project_changed.connect(self.on_project_changed)
         assets.selection_changed.connect(self.asset_changed)
         back.clicked.connect(self.back_clicked)
+
+        # Force initial refresh for the assets since we might not be
+        # trigging a Project switch if we click the project that was set
+        # prior to launching the Launcher
+        # todo: remove this behavior when AVALON_PROJECT is not required
+        assets.refresh()
 
     def set_project(self, project):
         self.data["model"]["projects"].set_project(project)
@@ -223,12 +288,26 @@ class Window(QtWidgets.QDialog):
         layout.addWidget(message)
         layout.addWidget(action_history)
 
+        # Vertically split Pages and Actions
+        body = QtWidgets.QSplitter()
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSizePolicy(QtWidgets.QSizePolicy.Expanding,
+                           QtWidgets.QSizePolicy.Expanding)
+        body.setOrientation(QtCore.Qt.Vertical)
+        body.addWidget(pages)
+        body.addWidget(actions)
+
+        # Set useful default sizes and set stretch
+        # for the pages so that is the only one that
+        # stretches on UI resize.
+        body.setStretchFactor(0, 10)
+        body.setSizes([580, 160])
+
         layout = QtWidgets.QVBoxLayout(self)
-        layout.addWidget(pages)
-        layout.addWidget(actions)
+        layout.addWidget(body)
         layout.addWidget(statusbar)
-        layout.setStretch(0, 10)
-        layout.setStretch(1, 3)
+        layout.setSpacing(0)
+        layout.setContentsMargins(0, 0, 0, 0)
 
         self.data = {
             "label": {
@@ -245,6 +324,7 @@ class Window(QtWidgets.QDialog):
         }
 
         self.pages = pages
+        self._page = 0
 
         # signals
         actions.action_clicked.connect(self.on_action_clicked)
@@ -260,7 +340,22 @@ class Window(QtWidgets.QDialog):
         ]:
             signal.connect(self.on_session_changed)
 
+        # todo: Simplify this callback connection
+        asset_panel.data["model"]["projects"].project_changed.connect(
+            self.on_project_changed
+        )
+
         self.resize(520, 740)
+
+    def set_page(self, page):
+
+        current = self.pages.currentIndex()
+        if current == page and self._page == page:
+            return
+
+        direction = "right" if page > current else "left"
+        self._page = page
+        self.pages.slide_view(page, direction=direction)
 
     def refresh(self):
         asset = self.data["pages"]["asset"]
@@ -284,18 +379,19 @@ class Window(QtWidgets.QDialog):
     def on_session_changed(self):
         self.refresh_actions()
 
-    def refresh_actions(self, delay=0):
-        tools_lib.schedule(self.on_refresh_actions, 0.05 + delay)
+    def refresh_actions(self, delay=1):
+        tools_lib.schedule(self.on_refresh_actions, delay)
 
     def on_project_clicked(self, project):
-        print(project)
-        self.pages.slide_view(1, direction="left")
 
         self.data["pages"]["asset"].set_project(project)
+        self.set_page(1)
+        self.refresh_actions()
 
     def on_back_clicked(self):
-        self.pages.slide_view(0, direction="right")
-        self.refresh_actions(delay=260)
+
+        self.set_page(0)
+        self.refresh_actions()
 
     def on_refresh_actions(self):
         session = self.get_current_session()
@@ -323,12 +419,23 @@ class Window(QtWidgets.QDialog):
 
     def get_current_session(self):
 
-        index = self.pages.currentIndex()
+        index = self._page
         if index == 1:
             # Assets page
             return self.data["pages"]["asset"]._get_current_session()
 
-        return copy.deepcopy(api.Session)
+        else:
+            session = copy.deepcopy(api.Session)
+
+            # Remove some potential invalid session values
+            # that we know are not set when not browsing in
+            # a project.
+            session.pop("AVALON_PROJECT", None)
+            session.pop("AVALON_ASSET", None)
+            session.pop("AVALON_SILO", None)
+            session.pop("AVALON_TASK", None)
+
+            return session
 
     def run_action(self, action, session=None):
 
@@ -372,6 +479,182 @@ class Window(QtWidgets.QDialog):
             panel.data["model"]["tasks"].select_task(task)
 
 
+class Application(QtWidgets.QApplication):
+
+    def __init__(self, *args):
+        super(Application, self).__init__(*args)
+
+        # Set app icon
+        icon_path = tools_lib.resource("icons", "png", "avalon-logo-16.png")
+        icon = QtGui.QIcon(icon_path)
+
+        self.setWindowIcon(icon)
+
+        # Toggles
+        self.toggles = {"autoHide": True}
+
+        # Timers
+        keep_visible = QtCore.QTimer(self)
+        keep_visible.setInterval(100)
+        keep_visible.setSingleShot(True)
+
+        timers = {"keepVisible": keep_visible}
+
+        tray = QtWidgets.QSystemTrayIcon(icon)
+        tray.setToolTip("Avalon Launcher")
+
+        # Signals
+        tray.activated.connect(self.on_tray_activated)
+        self.aboutToQuit.connect(self.on_quit)
+
+        menu = self.build_menu()
+        tray.setContextMenu(menu)
+        tray.show()
+
+        tray.showMessage("Avalon", "Launcher started.")
+
+        # Don't close the app when we close the log window.
+        self.setQuitOnLastWindowClosed(False)
+
+        self.focusChanged.connect(self.on_focus_changed)
+
+        window = Window()
+        window.setAttribute(QtCore.Qt.WA_DeleteOnClose, False)
+
+        self.timers = timers
+        self._tray = tray
+        self._window = window
+
+        geometry = self.calculate_window_geometry(window)
+        window.setGeometry(geometry)
+
+    def show(self):
+        """Show the primary GUI
+
+        This also activates the window and deals with platform-differences.
+
+        """
+
+        self._window.show()
+        self._window.raise_()
+        self._window.activateWindow()
+
+        self.timers["keepVisible"].start()
+
+    def on_tray_activated(self, reason):
+        if self._window.isVisible():
+            self._window.hide()
+
+        elif reason == QtWidgets.QSystemTrayIcon.Trigger:
+            self.show()
+
+    def on_focus_changed(self, old, new):
+        """Respond to window losing focus"""
+        window = new
+        keep_visible = self.timers["keepVisible"].isActive()
+        self._window.hide() if (self.toggles["autoHide"] and
+                                not window and
+                                not keep_visible) else None
+
+    def on_autohide_changed(self, auto_hide):
+        """Respond to changes to auto-hide
+
+        Auto-hide is changed in the UI and determines whether or not
+        the UI hides upon losing focus.
+
+        """
+
+        self.toggles["autoHide"] = auto_hide
+        self.broadcast("Hiding when losing focus" if auto_hide
+                       else "Stays visible")
+
+    def on_quit(self):
+        """Respond to the application quitting"""
+        self._tray.hide()
+
+    def build_menu(self):
+        """Build the right-mouse context menu for the tray icon"""
+        menu = QtWidgets.QMenu()
+
+        from ...vendor import qtawesome
+
+        icon = qtawesome.icon("fa.eye", color=style.colors.default)
+        open = QtWidgets.QAction(icon, "Open", self)
+        open.triggered.connect(self.show)
+
+        def toggle():
+            self.on_autohide_changed(not self.toggles['autoHide'])
+
+        keep_open = QtWidgets.QAction("Keep open", self)
+        keep_open.setCheckable(True)
+        keep_open.setChecked(not self.toggles['autoHide'])
+        keep_open.triggered.connect(toggle)
+
+        quit = QtWidgets.QAction("Quit", self)
+        quit.triggered.connect(self.quit)
+
+        menu.setStyleSheet("""
+        QMenu {
+            padding: 0px;
+            margin: 0px;
+        }
+        """)
+
+        for action in [open, keep_open, quit]:
+            menu.addAction(action)
+
+        return menu
+
+    def calculate_window_geometry(self, window):
+        """Respond to status changes
+
+        On creation, align window with where the tray icon is
+        located. For example, if the tray icon is in the upper
+        right corner of the screen, then this is where the
+        window is supposed to appear.
+
+        Arguments:
+            status (int): Provided by Qt, the status flag of
+                loading the input file.
+
+        """
+
+        tray_x = self._tray.geometry().x()
+        tray_y = self._tray.geometry().y()
+
+        width = window.width()
+        width = max(width, window.minimumWidth())
+
+        height = window.height()
+        height = max(height, window.sizeHint().height())
+
+        desktop_geometry = QtWidgets.QDesktopWidget().availableGeometry()
+        screen_geometry = window.geometry()
+
+        screen_width = screen_geometry.width()
+        screen_height = screen_geometry.height()
+
+        # Calculate width and height of system tray
+        systray_width = screen_geometry.width() - desktop_geometry.width()
+        systray_height = screen_geometry.height() - desktop_geometry.height()
+
+        padding = 10
+
+        x = screen_width - width
+        y = screen_height - height
+
+        if tray_x < (screen_width / 2):
+            x = 0 + systray_width + padding
+        else:
+            x -= systray_width + padding
+
+        if tray_y < (screen_height / 2):
+            y = 0 + systray_height + padding
+        else:
+            y -= systray_height + padding
+
+        return QtCore.QRect(x, y, width, height)
+
 
 def show(root=None, debug=False, parent=None):
     """Display Loader GUI
@@ -384,32 +667,13 @@ def show(root=None, debug=False, parent=None):
 
     """
 
-    try:
-        module.window.close()
-        del module.window
-    except (RuntimeError, AttributeError):
-        pass
+    app = Application(sys.argv)
+    app.setStyleSheet(style.load_stylesheet())
 
-    if debug is True:
-        io.install()
+    # Show the window on launch
+    app.show()
 
-    with tools_lib.application():
-
-        import os
-        up = os.path.dirname
-        root = up(up(up(up(__file__))))
-        icon = os.path.join(root, "res", "icons", "png", "launcher.png")
-        print(icon)
-
-        app = QtWidgets.QApplication.instance()
-        app.setWindowIcon(QtGui.QIcon(icon))
-
-        window = Window(parent)
-        window.show()
-        window.setStyleSheet(style.load_stylesheet())
-        window.refresh()
-
-        module.window = window
+    app.exec_()
 
 
 def cli(args):
