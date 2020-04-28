@@ -1,5 +1,22 @@
-import copy
+"""
+This based on the flickcharm-python code from:
+    https://code.google.com/archive/p/flickcharm-python/
+
+Which states:
+    This is a Python (PyQt) port of Ariya Hidayat's elegant FlickCharm
+    hack which adds kinetic scrolling to any scrollable Qt widget.
+
+    Licensed under GNU GPL version 2 or later.
+
+It has been altered to fix edge cases where clicks and drags would not
+propagate correctly under some conditions. It also allows a small "dead zone"
+threshold in which it will still propagate the user pressed click if he or she
+travelled only very slightly with the cursor.
+
+"""
+
 from avalon.vendor.Qt import QtWidgets, QtCore, QtGui
+import copy
 import sys
 
 
@@ -27,6 +44,10 @@ class FlickCharm(QtCore.QObject):
     For example:
         charm = FlickCharm()
         charm.activateOn(widget)
+
+    It can `activateOn` multiple widgets with a single FlickCharm instance.
+    Be aware that the FlickCharm object must be kept around for it not
+    to get garbage collected and losing the flickable behavior.
 
     Flick away!
 
@@ -191,6 +212,7 @@ class FlickCharm(QtCore.QObject):
         return False
 
     def _set_press_pos_and_offset(self, event, data):
+        """Store current event position on Press"""
         data.state = FlickData.Pressed
         data.pressPos = copy.copy(event.pos())
         data.offset = scrollOffset(data.widget)
@@ -257,8 +279,9 @@ def setScrollOffset(widget, p):
 
 
 def deaccelerate(speed, a=1, maxVal=64):
-    x = bound(-maxVal, speed.x(), maxVal)
-    y = bound(-maxVal, speed.y(), maxVal)
+
+    x = max(min(speed.x(), maxVal), -maxVal)
+    y = max(min(speed.y(), maxVal), -maxVal)
     if x > 0:
         x = max(0, x - a)
     elif x < 0:
@@ -270,10 +293,6 @@ def deaccelerate(speed, a=1, maxVal=64):
     return QtCore.QPoint(x, y)
 
 
-def bound(minVal, current, maxVal):
-    return max(min(current, maxVal), minVal)
-
-
 def removeAll(list, val):
     found = False
     ret = []
@@ -282,5 +301,5 @@ def removeAll(list, val):
             found = True
         else:
             ret.append(element)
-    return (found, ret)
+    return found, ret
 
