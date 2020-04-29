@@ -105,9 +105,8 @@ class ProjectsPanel(QtWidgets.QWidget):
 
         view = IconListView()
         view.setSelectionMode(QtWidgets.QListView.NoSelection)
-        flick = FlickCharm()
+        flick = FlickCharm(parent=self)
         flick.activateOn(view)
-        self._flick = flick
         model = ProjectsModel()
         model.hide_invisible = True
         model.refresh()
@@ -151,11 +150,9 @@ class AssetsPanel(QtWidgets.QWidget):
         assets = AssetWidget(silo_creatable=False)
 
         # Make assets view flickable
-        flick = FlickCharm()
+        flick = FlickCharm(parent=self)
         flick.activateOn(assets.view)
         assets.view.setVerticalScrollMode(assets.view.ScrollPerPixel)
-        print("Set %s flickable.." % assets.view)
-        self._flick = flick
         assets_layout.addWidget(assets)
 
         # tasks

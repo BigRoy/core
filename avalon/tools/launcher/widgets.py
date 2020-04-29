@@ -103,8 +103,8 @@ class ActionBar(QtWidgets.QWidget):
         self.view = view
 
         # Make view flickable
-        self._flick = FlickCharm()
-        self._flick.activateOn(view)
+        flick = FlickCharm(parent=view)
+        flick.activateOn(view)
 
         self.set_row_height(1)
 

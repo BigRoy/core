@@ -53,8 +53,8 @@ class FlickCharm(QtCore.QObject):
 
     """
 
-    def __init__(self):
-        super(FlickCharm, self).__init__()
+    def __init__(self, parent=None):
+        super(FlickCharm, self).__init__(parent=parent)
 
         self.flickData = {}
         self.ticker = QtCore.QBasicTimer()
