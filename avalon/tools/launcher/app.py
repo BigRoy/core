@@ -18,6 +18,11 @@ module.window = None
 
 
 class IconListView(QtWidgets.QListView):
+    """Styled ListView that allows to toggle between icon and list mode.
+
+    Toggling between the two modes is done by Right Mouse Click.
+
+    """
 
     IconMode = 0
     ListMode = 1
