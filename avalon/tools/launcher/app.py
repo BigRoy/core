@@ -409,13 +409,13 @@ class Window(QtWidgets.QDialog):
         app = QtWidgets.QApplication.instance()
         modifiers = app.keyboardModifiers()
 
-        if QtCore.Qt.ControlModifier & modifiers:
-            # User is holding control
-            # revert to that "session" location
-            self.set_session(session)
-        else:
-            # Rerun the action
+        is_control_down = QtCore.Qt.ControlModifier & modifiers
+        if is_control_down:
+            # User is holding control, rerun the action
             self.run_action(action, session=session)
+        else:
+            # Revert to that "session" location
+            self.set_session(session)
 
     def get_current_session(self):
 
