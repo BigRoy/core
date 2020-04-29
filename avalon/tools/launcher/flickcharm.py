@@ -176,7 +176,6 @@ class FlickCharm(QtCore.QObject):
                 # the click in autoscroll threshold
                 velocity = data.speed.manhattanLength()
                 if velocity <= self.click_in_autoscroll_threshold:
-                    print("Click during slow scroll..")
                     self._set_press_pos_and_offset(event, data)
                     data.state = FlickData.Pressed
                 else:
