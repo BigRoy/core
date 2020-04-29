@@ -200,9 +200,11 @@ class FlickCharm(QtCore.QObject):
 
                 return True
             elif eventType == QtCore.QEvent.MouseMove:
-                data.state = FlickData.ManualScroll
-
+                # Reset the press position and offset to allow us to "continue"
+                # the scroll from the new point the user clicked and then held
+                # down to continue scrolling after AutoScroll.
                 self._set_press_pos_and_offset(event, data)
+                data.state = FlickData.ManualScroll
 
                 data.dragPos = QtGui.QCursor.pos()
                 if not self.ticker.isActive():
