@@ -270,6 +270,11 @@ class Window(QtWidgets.QDialog):
         self.setFocusPolicy(QtCore.Qt.StrongFocus)
         self.setAttribute(QtCore.Qt.WA_DeleteOnClose)
 
+        # Allow minimize
+        self.setWindowFlags(
+            self.windowFlags() | QtCore.Qt.WindowMinimizeButtonHint
+        )
+
         project_panel = ProjectsPanel()
         asset_panel = AssetsPanel()
 
@@ -493,7 +498,7 @@ class Application(QtWidgets.QApplication):
         self.setWindowIcon(icon)
 
         # Toggles
-        self.toggles = {"autoHide": True}
+        self.toggles = {"autoHide": False}
 
         # Timers
         keep_visible = QtCore.QTimer(self)
@@ -567,8 +572,7 @@ class Application(QtWidgets.QApplication):
         """
 
         self.toggles["autoHide"] = auto_hide
-        self.broadcast("Hiding when losing focus" if auto_hide
-                       else "Stays visible")
+        self.echo("Hiding when losing focus" if auto_hide else "Stays visible")
 
     def on_quit(self):
         """Respond to the application quitting"""
