@@ -30,7 +30,7 @@ class ProjectBar(QtWidgets.QWidget):
                            QtWidgets.QSizePolicy.Maximum)
 
         # Initialize
-        self.model.refresh()
+        self.refresh()
 
         # Signals
         self.view.currentIndexChanged.connect(self.project_changed)
@@ -50,6 +50,22 @@ class ProjectBar(QtWidgets.QWidget):
         index = self.view.findText(project)
         if index >= 0:
             self.view.setCurrentIndex(index)
+
+    def refresh(self):
+        before = self.get_current_project()
+
+        # Refresh without signals
+        self.view.blockSignals(True)
+        self.model.refresh()
+
+        index = self.view.findText(before)
+        if index != -1:
+            self.view.setCurrentIndex(index)
+
+        self.view.blockSignals(False)
+
+        if index == -1:
+            self.project_changed.emit(self.view.currentIndex())
 
 
 class ActionBar(QtWidgets.QWidget):

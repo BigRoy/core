@@ -121,6 +121,9 @@ class ProjectsPanel(QtWidgets.QWidget):
 
         view.clicked.connect(self.on_clicked)
 
+        self.model = model
+        self.view = view
+
     def on_clicked(self, index):
 
         if index.isValid():
@@ -199,7 +202,14 @@ class AssetsPanel(QtWidgets.QWidget):
         assets.refresh()
 
     def set_project(self, project):
-        self.data["model"]["projects"].set_project(project)
+
+        projects = self.data["model"]["projects"]
+
+        before = projects.get_current_project()
+        projects.set_project(project)
+        if project == before:
+            # Force a refresh on the assets if the project hasn't changed
+            self.data["model"]["assets"].refresh()
 
     def asset_changed(self):
         tools_lib.schedule(self.on_asset_changed, 0.05,
@@ -391,13 +401,16 @@ class Window(QtWidgets.QDialog):
 
     def on_project_clicked(self, project):
 
-        self.data["pages"]["asset"].set_project(project)
+        asset_panel = self.data["pages"]["asset"]
+        asset_panel.data["model"]["projects"].refresh()  # Refresh projects
+        asset_panel.set_project(project)
         self.set_page(1)
         self.refresh_actions()
 
     def on_back_clicked(self):
 
         self.set_page(0)
+        self.data["pages"]["project"].model.refresh()    # Refresh projects
         self.refresh_actions()
 
     def on_refresh_actions(self):
